@@ -10,6 +10,23 @@
   </style>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans">
+<script>
+  const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbyg9xNJ1a_5IbdzSY8YXnboGwVpspvMSzNdRk5U2YGZMMBVal6z3p0Lgp8bmDNNB-dR/exec';
+
+// Pengganti google.script.run agar berjalan di GitHub Pages
+async function callBackend(action, params = {}) {
+  const response = await fetch(GAS_API_URL, {
+    method: 'POST',
+    body: JSON.stringify({ action, ...params })
+  });
+  return await response.json();
+}
+  
+</script>
+
+
+
+
 
   <!-- Navbar -->
   <nav class="bg-blue-700 text-white shadow-md sticky top-0 z-40">
@@ -588,7 +605,7 @@
       if (!pin || pin.length < 4) return alert('Masukkan 4 digit PIN!');
 
       showLoading('Memverifikasi PIN Siswa...');
-      google.script.run.withSuccessHandler(res => {
+      callBackend(res => {
         hideLoading();
         if (!res.valid) return alert('PIN salah! Hubungi guru jika lupa PIN.');
         
@@ -622,7 +639,7 @@
     function handleAdminLogin() {
       const pin = document.getElementById('adminPinInput').value;
       showLoading('Memeriksa akses guru...');
-      google.script.run.withSuccessHandler(valid => {
+      callBackend(valid => {
         hideLoading();
         if (!valid) return alert('Password Guru salah!');
         
@@ -665,7 +682,7 @@
       if (!isi) return alert('Komentar tidak boleh kosong!');
 
       showLoading('Mengirim komentar...');
-      google.script.run.withSuccessHandler(res => {
+      callBackend(res => {
         hideLoading();
         if (res.success) {
           inputEl.value = '';
@@ -684,7 +701,7 @@
       if (newText === null || newText.trim() === '' || newText.trim() === currentText) return;
 
       showLoading('Menyimpan perubahan komentar...');
-      google.script.run.withSuccessHandler(res => {
+      callBackend(res => {
         hideLoading();
         if (res.success) loadData();
         else alert(res.message);
@@ -697,7 +714,7 @@
       if (!confirm('Hapus komentar ini?')) return;
 
       showLoading('Menghapus komentar...');
-      google.script.run.withSuccessHandler(res => {
+      callBackend(res => {
         hideLoading();
         if (res.success) loadData();
         else alert(res.message);
@@ -709,7 +726,7 @@
       if (!auth) return alert('Silakan Login sebagai Siswa atau Guru terlebih dahulu untuk memberikan reaksi!');
 
       showLoading('Memproses reaksi...');
-      google.script.run.withSuccessHandler(res => {
+      callBackend(res => {
         hideLoading();
         if (res.success) loadData();
         else alert(res.message);
@@ -747,7 +764,7 @@
       }
 
       showLoading('Menyimpan kontrak belajar...');
-      google.script.run.withSuccessHandler(res => {
+      callBackend(res => {
         hideLoading();
         if (res.success) {
           currentStudent = payload;
@@ -876,7 +893,7 @@
       if (!nama || pin.length !== 4) return alert('Isi nama siswa dan PIN tepat 4 digit!');
 
       showLoading('Menyimpan data siswa...');
-      google.script.run.withSuccessHandler(res => {
+      callBackend(res => {
         hideLoading();
         alert(res.message);
         if (res.success) {
@@ -893,7 +910,7 @@
       if (!newPin || newPin.length < 4) return alert('Password baru minimal 4 karakter!');
 
       showLoading('Memperbarui password...');
-      google.script.run.withSuccessHandler(res => {
+      callBackend(res => {
         hideLoading();
         if (res.success) {
           verifiedAdminPin = newPin;
@@ -911,7 +928,7 @@
       const status = document.getElementById('stat-' + id).value;
       const komentar = document.getElementById('kom-' + id).value;
       showLoading('Menyimpan pemeriksaan...');
-      google.script.run.withSuccessHandler(res => {
+      callBackend(res => {
         hideLoading();
         if (res.success) loadData();
       }).updateProgressStatus(verifiedAdminPin, id, status, komentar);
