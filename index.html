@@ -235,6 +235,26 @@
     <img id="zoomImg" src="" class="max-h-[90vh] max-w-[95vw] rounded-lg shadow-2xl object-contain">
   </div>
 
+  <!-- NOTIFIKASI TOAST KUSTOM (Pengganti alert() agar tampil di Google Sites) -->
+  <div id="toastBox" class="hidden fixed bottom-5 right-5 z-[60] max-w-sm w-full bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl border border-slate-700 flex items-start gap-3 transition-all">
+    <span id="toastIcon" class="text-lg">ℹ️</span>
+    <div class="flex-1 text-xs leading-relaxed" id="toastMsg"></div>
+    <button onclick="document.getElementById('toastBox').classList.add('hidden')" class="text-slate-400 hover:text-white font-bold">&times;</button>
+  </div>
+
+  <!-- MODAL KONFIRMASI & INPUT KUSTOM (Pengganti confirm() dan prompt()) -->
+  <div id="customDialogModal" class="hidden fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl">
+      <h4 id="dialogTitle" class="font-bold text-base text-slate-800 mb-2">Konfirmasi</h4>
+      <p id="dialogMessage" class="text-xs text-slate-600 mb-3 leading-relaxed"></p>
+      <input type="text" id="dialogInput" class="hidden w-full border border-slate-300 rounded-lg p-2 text-sm mb-4 focus:outline-blue-600">
+      <div class="flex justify-end gap-2">
+        <button id="dialogCancelBtn" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700">Batal</button>
+        <button id="dialogOkBtn" class="px-4 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white">Ya, Lanjutkan</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     // URL Web App Google Apps Script sebagai Backend API
     const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbyg9xNJ1a_5IbdzSY8YXnboGwVpspvMSzNdRk5U2YGZMMBVal6z3p0Lgp8bmDNNB-dR/exec';
@@ -251,7 +271,54 @@
       { key: 'SEMANGAT', icon: '💪', label: 'Semangat' }
     ];
 
-    // Fungsi Penghubung Fetch API ke Google Apps Script
+    // --- KOMPONEN DIALOG & NOTIFIKASI RAMAH IFRAME / GOOGLE SITES ---
+    let toastTimer;
+    function showToast(msg, isError = false) {
+      const box = document.getElementById('toastBox');
+      const icon = document.getElementById('toastIcon');
+      const text = document.getElementById('toastMsg');
+      
+      box.className = `fixed bottom-5 right-5 z-[60] max-w-sm w-full px-4 py-3 rounded-xl shadow-2xl border flex items-start gap-3 transition-all ${
+        isError ? 'bg-rose-900 border-rose-700 text-white' : 'bg-slate-900 border-slate-700 text-white'
+      }`;
+      icon.innerText = isError ? '⚠️' : '✅';
+      text.innerText = msg;
+      box.classList.remove('hidden');
+
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => box.classList.add('hidden'), 4500);
+    }
+
+    function showConfirm(message, title = 'Konfirmasi') {
+      return new Promise(resolve => {
+        const modal = document.getElementById('customDialogModal');
+        document.getElementById('dialogTitle').innerText = title;
+        document.getElementById('dialogMessage').innerText = message;
+        document.getElementById('dialogInput').classList.add('hidden');
+        modal.classList.remove('hidden');
+
+        document.getElementById('dialogOkBtn').onclick = () => { modal.classList.add('hidden'); resolve(true); };
+        document.getElementById('dialogCancelBtn').onclick = () => { modal.classList.add('hidden'); resolve(false); };
+      });
+    }
+
+    function showPrompt(message, defaultValue = '', title = 'Ubah Teks') {
+      return new Promise(resolve => {
+        const modal = document.getElementById('customDialogModal');
+        const input = document.getElementById('dialogInput');
+        document.getElementById('dialogTitle').innerText = title;
+        document.getElementById('dialogMessage').innerText = message;
+        input.value = defaultValue;
+        input.classList.remove('hidden');
+        modal.classList.remove('hidden');
+        input.focus();
+
+        document.getElementById('dialogOkBtn').onclick = () => { modal.classList.add('hidden'); resolve(input.value); };
+        document.getElementById('dialogCancelBtn').onclick = () => { modal.classList.add('hidden'); resolve(null); };
+      });
+    }
+
+    // --- KONEKSI FETCH API KE GOOGLE APPS SCRIPT ---
     async function callBackend(action, params = {}) {
       const response = await fetch(GAS_API_URL, {
         method: 'POST',
@@ -311,7 +378,7 @@
       try {
         const data = await callBackend('getInitialData');
         hideLoading();
-        if (!data) return alert('Data gagal dimuat dari server.');
+        if (!data) return showToast('Data gagal dimuat dari server.', true);
         appData = data;
         
         if (currentStudent) {
@@ -325,7 +392,7 @@
         renderGallery();
       } catch (err) {
         hideLoading();
-        alert('Gagal memuat data: ' + err.message);
+        showToast('Gagal memuat data: ' + err.message, true);
       }
     }
 
@@ -458,6 +525,7 @@
         if (p.status === 'Sudah Diperiksa') badgeColor = 'bg-emerald-100 text-emerald-800';
         if (p.status === 'Perlu Revisi') badgeColor = 'bg-rose-100 text-rose-800';
 
+        // Tombol Hapus muncul untuk Guru (bebas) atau Siswa pemilik (selama belum diperiksa)
         const canDeleteSetoran = verifiedAdminPin || (currentStudent && currentStudent.nama === p.nama && p.status !== 'Sudah Diperiksa');
         const deleteButton = canDeleteSetoran ? `
           <button onclick="handleDeleteProgress('${p.id}')" class="text-[11px] bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 px-2 py-1 rounded-lg font-semibold transition">
@@ -595,13 +663,13 @@
     async function handleStudentLogin() {
       const nama = document.getElementById('loginNama').value;
       const pin = document.getElementById('loginPin').value;
-      if (!pin || pin.length < 4) return alert('Masukkan 4 digit PIN!');
+      if (!pin || pin.length < 4) return showToast('Masukkan 4 digit PIN!', true);
 
       showLoading('Memverifikasi PIN Siswa...');
       try {
         const res = await callBackend('verifyStudentPin', { nama, pin });
         hideLoading();
-        if (!res.valid) return alert('PIN salah! Hubungi guru jika lupa PIN.');
+        if (!res.valid) return showToast('PIN salah! Hubungi guru jika lupa PIN.', true);
         
         verifiedAdminPin = '';
         localStorage.removeItem('adminSession');
@@ -614,9 +682,10 @@
         updateAuthUI();
         renderLeaderboard();
         renderGallery();
+        showToast('Selamat datang, ' + currentStudent.nama + '!');
       } catch (err) {
         hideLoading();
-        alert('Error: ' + err.message);
+        showToast('Error: ' + err.message, true);
       }
     }
 
@@ -638,7 +707,7 @@
       try {
         const valid = await callBackend('verifyAdminPin', { pin });
         hideLoading();
-        if (!valid) return alert('Password Guru salah!');
+        if (!valid) return showToast('Password Guru salah!', true);
         
         currentStudent = null;
         currentStudentPin = '';
@@ -651,15 +720,16 @@
         updateAuthUI();
         renderLeaderboard();
         renderGallery();
+        showToast('Mode Guru aktif.');
       } catch (err) {
         hideLoading();
-        alert('Error: ' + err.message);
+        showToast('Error: ' + err.message, true);
       }
     }
 
-    function logoutUser() {
+    async function logoutUser() {
       const label = verifiedAdminPin ? 'Mode Guru' : 'akun ' + currentStudent.nama;
-      if (!confirm('Keluar dari ' + label + '?')) return;
+      if (!(await showConfirm('Keluar dari ' + label + '?'))) return;
 
       currentStudent = null;
       currentStudentPin = '';
@@ -670,15 +740,16 @@
       updateAuthUI();
       renderLeaderboard();
       renderGallery();
+      showToast('Berhasil logout.');
     }
 
     // --- AKSI KOMENTAR & REAKSI ---
     async function handleAddComment(progressId) {
       const auth = getCurrentAuth();
-      if (!auth) return alert('Silakan login terlebih dahulu!');
+      if (!auth) return showToast('Silakan login terlebih dahulu!', true);
       const inputEl = document.getElementById('new-kom-' + progressId);
       const isi = inputEl.value.trim();
-      if (!isi) return alert('Komentar tidak boleh kosong!');
+      if (!isi) return showToast('Komentar tidak boleh kosong!', true);
 
       showLoading('Mengirim komentar...');
       try {
@@ -686,13 +757,14 @@
         hideLoading();
         if (res.success) {
           inputEl.value = '';
+          showToast('Komentar ditambahkan.');
           loadData();
         } else {
-          alert(res.message);
+          showToast(res.message, true);
         }
       } catch (err) {
         hideLoading();
-        alert('Error: ' + err.message);
+        showToast('Error: ' + err.message, true);
       }
     }
 
@@ -700,51 +772,59 @@
       const auth = getCurrentAuth();
       if (!auth || auth.role !== 'GURU') return;
       const currentText = document.getElementById('kom-text-' + idKom).innerText.replace(' (diedit)', '');
-      const newText = prompt('Edit komentar guru:', currentText);
+      const newText = await showPrompt('Edit komentar guru:', currentText);
       if (newText === null || newText.trim() === '' || newText.trim() === currentText) return;
 
       showLoading('Menyimpan perubahan komentar...');
       try {
         const res = await callBackend('editComment', { auth, idKom, newIsi: newText });
         hideLoading();
-        if (res.success) loadData();
-        else alert(res.message);
+        if (res.success) {
+          showToast('Komentar diperbarui.');
+          loadData();
+        } else {
+          showToast(res.message, true);
+        }
       } catch (err) {
         hideLoading();
-        alert('Error: ' + err.message);
+        showToast('Error: ' + err.message, true);
       }
     }
 
     async function handleDeleteComment(idKom) {
       const auth = getCurrentAuth();
       if (!auth) return;
-      if (!confirm('Hapus komentar ini?')) return;
+      if (!(await showConfirm('Hapus komentar ini?'))) return;
 
       showLoading('Menghapus komentar...');
       try {
         const res = await callBackend('deleteComment', { auth, idKom });
         hideLoading();
-        if (res.success) loadData();
-        else alert(res.message);
+        if (res.success) {
+          showToast('Komentar dihapus.');
+          loadData();
+        } else {
+          showToast(res.message, true);
+        }
       } catch (err) {
         hideLoading();
-        alert('Error: ' + err.message);
+        showToast('Error: ' + err.message, true);
       }
     }
 
     async function handleToggleReaction(targetId, tipe) {
       const auth = getCurrentAuth();
-      if (!auth) return alert('Silakan Login sebagai Siswa atau Guru terlebih dahulu untuk memberikan reaksi!');
+      if (!auth) return showToast('Silakan Login sebagai Siswa atau Guru terlebih dahulu untuk memberikan reaksi!', true);
 
       showLoading('Memproses reaksi...');
       try {
         const res = await callBackend('toggleReaction', { auth, targetId, tipe });
         hideLoading();
         if (res.success) loadData();
-        else alert(res.message);
+        else showToast(res.message, true);
       } catch (err) {
         hideLoading();
-        alert('Error: ' + err.message);
+        showToast('Error: ' + err.message, true);
       }
     }
 
@@ -775,7 +855,7 @@
         sudahIsiProfil: true
       };
       if (!payload.mapelFav || !payload.mapelBerjuang || !payload.komitmen) {
-        return alert('Semua kolom wajib diisi!');
+        return showToast('Semua kolom wajib diisi!', true);
       }
 
       showLoading('Menyimpan kontrak belajar...');
@@ -787,13 +867,14 @@
           localStorage.setItem('studentSession', JSON.stringify({ profil: currentStudent, pin: currentStudentPin }));
           document.getElementById('stepProfile').classList.add('hidden');
           showUploadStep();
+          showToast('Kontrak belajar tersimpan.');
           loadData();
         } else {
-          alert(res.message || 'Gagal menyimpan profil');
+          showToast(res.message || 'Gagal menyimpan profil', true);
         }
       } catch (err) {
         hideLoading();
-        alert('Error: ' + err.message);
+        showToast('Error: ' + err.message, true);
       }
     }
 
@@ -833,7 +914,7 @@
     async function handleUploadProgress() {
       const fFav = document.getElementById('fileFav').files[0];
       const fBerjuang = document.getElementById('fileBerjuang').files[0];
-      if (!fFav || !fBerjuang) return alert('Wajib mengunggah kedua foto (Mapel Favorit & Mapel Berjuang)!');
+      if (!fFav || !fBerjuang) return showToast('Wajib mengunggah kedua foto (Mapel Favorit & Mapel Berjuang)!', true);
 
       const btnKirim = document.getElementById('btnKirimProgress');
       btnKirim.disabled = true;
@@ -862,37 +943,37 @@
           document.getElementById('fileBerjuang').value = '';
           document.getElementById('inpCatatan').value = '';
           closeModal('uploadModal');
-          alert('Berhasil! Progres belajarmu sudah masuk ke papan kelas.');
+          showToast('Berhasil! Progres belajarmu sudah masuk ke papan kelas.');
           loadData();
         } else {
-          alert('Gagal menyimpan: ' + (res ? res.message : 'Respon kosong'));
+          showToast('Gagal menyimpan: ' + (res ? res.message : 'Respon kosong'), true);
         }
       } catch (err) {
         hideLoading();
         btnKirim.disabled = false;
         btnKirim.innerText = 'Kirim Foto Progres';
-        alert('Terjadi kesalahan: ' + err.message);
+        showToast('Terjadi kesalahan: ' + err.message, true);
       }
     }
 
     async function handleDeleteProgress(id) {
       const auth = getCurrentAuth();
       if (!auth) return;
-      if (!confirm('Yakin ingin menghapus setoran ini beserta foto dan komentarnya?')) return;
+      if (!(await showConfirm('Yakin ingin menghapus setoran ini beserta foto dan komentarnya?'))) return;
       
       showLoading('Menghapus setoran...');
       try {
         const res = await callBackend('deleteProgress', { auth, id });
         hideLoading();
         if (res && res.success) {
-          alert('Setoran berhasil dihapus.');
+          showToast('Setoran berhasil dihapus.');
           loadData();
         } else {
-          alert('Gagal menghapus: ' + (res ? res.message : 'Error tidak diketahui'));
+          showToast('Gagal menghapus: ' + (res ? res.message : 'Error tidak diketahui'), true);
         }
       } catch (err) {
         hideLoading();
-        alert('Terjadi kesalahan: ' + err.message);
+        showToast('Terjadi kesalahan: ' + err.message, true);
       }
     }
 
@@ -900,13 +981,13 @@
     async function handleAddSiswa() {
       const nama = document.getElementById('newSiswaNama').value;
       const pin = document.getElementById('newSiswaPin').value;
-      if (!nama || pin.length !== 4) return alert('Isi nama siswa dan PIN tepat 4 digit!');
+      if (!nama || pin.length !== 4) return showToast('Isi nama siswa dan PIN tepat 4 digit!', true);
 
       showLoading('Menyimpan data siswa...');
       try {
         const res = await callBackend('addOrUpdateStudent', { adminPin: verifiedAdminPin, nama, pin });
         hideLoading();
-        alert(res.message);
+        showToast(res.message, !res.success);
         if (res.success) {
           document.getElementById('newSiswaNama').value = '';
           document.getElementById('newSiswaPin').value = '';
@@ -914,14 +995,14 @@
         }
       } catch (err) {
         hideLoading();
-        alert('Error: ' + err.message);
+        showToast('Error: ' + err.message, true);
       }
     }
 
     async function handleChangeAdminPin() {
       const oldPin = document.getElementById('oldAdminPin').value;
       const newPin = document.getElementById('newAdminPin').value;
-      if (!newPin || newPin.length < 4) return alert('Password baru minimal 4 karakter!');
+      if (!newPin || newPin.length < 4) return showToast('Password baru minimal 4 karakter!', true);
 
       showLoading('Memperbarui password...');
       try {
@@ -930,15 +1011,15 @@
         if (res.success) {
           verifiedAdminPin = newPin;
           localStorage.setItem('adminSession', newPin);
-          alert('Password Guru berhasil diubah!');
+          showToast('Password Guru berhasil diubah!');
           document.getElementById('oldAdminPin').value = '';
           document.getElementById('newAdminPin').value = '';
         } else {
-          alert(res.message);
+          showToast(res.message, true);
         }
       } catch (err) {
         hideLoading();
-        alert('Error: ' + err.message);
+        showToast('Error: ' + err.message, true);
       }
     }
 
@@ -949,10 +1030,13 @@
       try {
         const res = await callBackend('updateProgressStatus', { adminPin: verifiedAdminPin, id, status, komentar });
         hideLoading();
-        if (res.success) loadData();
+        if (res.success) {
+          showToast('Status pemeriksaan disimpan.');
+          loadData();
+        }
       } catch (err) {
         hideLoading();
-        alert('Error: ' + err.message);
+        showToast('Error: ' + err.message, true);
       }
     }
   </script>
